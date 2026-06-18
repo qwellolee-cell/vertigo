@@ -9,6 +9,7 @@
 #include "modules/DriveModule.h"
 #include "modules/SnareRush.h"
 #include "modules/NoiseRiser.h"
+#include "modules/CaptureBuffer.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -59,6 +60,9 @@ private:
 
     // DSP — M5: Noise Riser generator
     NoiseRiser noiseRiser;
+
+    // DSP — M6: Capture Buffer (stutter/freeze)
+    CaptureBuffer captureBuffer;
 
     // Generators buffer (stereo, summed into main buffer)
     juce::AudioBuffer<float> generatorsBuffer;

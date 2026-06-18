@@ -82,6 +82,9 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // M5: Noise Riser
     noiseRiser.prepare(spec);
 
+    // M6: Capture Buffer
+    captureBuffer.prepare(spec);
+
     // Allocate generators buffer
     generatorsBuffer.setSize(2, samplesPerBlock, false, true, true);
 
@@ -116,6 +119,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float driveDepth   = apvts.getRawParameterValue("driveDepth")->load();
     const float snareDepth   = apvts.getRawParameterValue("snareDepth")->load();
     const float riserDepth   = apvts.getRawParameterValue("riserDepth")->load();
+    const float gateDepth    = apvts.getRawParameterValue("gateDepth")->load();
     const float outputGainDB = apvts.getRawParameterValue("output")->load();
 
     const float outputGain   = juce::Decibels::decibelsToGain(outputGainDB);
@@ -133,6 +137,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float driveActivation = smoothstep(preset.driveOnset, preset.driveFull, build) * driveDepth;
     const float snareActivation = smoothstep(preset.snareOnset, preset.snareFull, build) * snareDepth;
     const float riserActivation = smoothstep(preset.riserOnset, preset.riserFull, build) * riserDepth;
+    const float gateActivation  = smoothstep(preset.gateOnset,  preset.gateFull,  build) * gateDepth;
 
     // M2: Update HPF parameters based on activation
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
@@ -154,6 +159,9 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // M5: Noise Riser
     noiseRiser.setActivation(riserActivation, preset.riserCeil);
 
+    // M6: Capture Buffer stutter/freeze
+    captureBuffer.setParams(bpm, gateActivation, preset.gateOnset);
+
     // Build audio block for DSP processing
     auto block = juce::dsp::AudioBlock<float>(buffer);
 
@@ -168,6 +176,11 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // M3: Drive after verb (colours the reverb tail too)
     if (driveActivation > 0.001f)
         driveModule.process(block, driveActivation);
+
+    // M6: Capture Buffer — writes the post-HPF/verb/drive signal into ring buffer
+    // and replaces output with looped slice when gate is active
+    if (gateActivation > 0.001f)
+        captureBuffer.process(buffer, numSamples);
 
     // --- GENERATORS path (M4+) ---
     if (numSamples <= generatorsBuffer.getNumSamples())
