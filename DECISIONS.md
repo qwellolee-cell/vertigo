@@ -54,6 +54,18 @@
 - Per-preset macro table applied to all 7 effect activation values
 - Depth trim parameters multiply the activation value (0→1 scale)
 
+## Distribution / Installer
+
+- GitHub Actions CI builds macOS (universal), Windows, Linux on every `v*.*.*` tag push
+- Each platform produces a zip: VST3 bundle + platform install script
+- Install scripts target user-level plugin folders (no admin rights needed):
+  - macOS: `~/Library/Audio/Plug-Ins/VST3/` and `~/Library/Audio/Plug-Ins/Components/`
+  - Windows: `%APPDATA%\VST3\` (scanned by all major DAWs; no elevation required)
+  - Linux: `~/.vst3/`
+- macOS build uses `CMAKE_OSX_ARCHITECTURES="x86_64;arm64"` for a universal binary
+- Release body auto-includes install table; `generate_release_notes: false` used to keep it clean
+- `softprops/action-gh-release@v2` chosen over the deprecated v1 for reliability
+
 ## M8: Impact Cut + Minimal Editor
 
 - Impact cut: hard duck applied to final mix when build > impactOnset

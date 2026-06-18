@@ -1,0 +1,145 @@
+name: Build & Release VERTIGO
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: VERTIGO-mac
+            zip: VERTIGO-mac.zip
+          - os: windows-latest
+            artifact: VERTIGO-windows
+            zip: VERTIGO-windows.zip
+          - os: ubuntu-22.04
+            artifact: VERTIGO-linux
+            zip: VERTIGO-linux.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libfreetype6-dev libx11-dev libxcomposite-dev \
+            libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxrender-dev libglu1-mesa-dev libjack-jackd2-dev \
+            libcurl4-openssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libfontconfig1-dev
+
+      - name: Cache JUCE source
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: juce-${{ runner.os }}-
+
+      - name: Configure (macOS — universal binary)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+
+      - name: Configure (Windows / Linux)
+        if: runner.os != 'macOS'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j4
+
+      # ── macOS ──────────────────────────────────────────────────────────────
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          cp -r "build/VERTIGO_artefacts/Release/VST3/VERTIGO.vst3" dist/
+          cp -r "build/VERTIGO_artefacts/Release/AU/VERTIGO.component" dist/ 2>/dev/null || true
+          cp scripts/install-mac.command dist/
+          chmod +x dist/install-mac.command
+          cd dist && zip -r --symlinks ../${{ matrix.zip }} .
+
+      # ── Windows ────────────────────────────────────────────────────────────
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force
+          Copy-Item -Recurse "build/VERTIGO_artefacts/Release/VST3/VERTIGO.vst3" dist/
+          Copy-Item "scripts/install-windows.bat" dist/
+          Compress-Archive -Path "dist/*" -DestinationPath "${{ matrix.zip }}"
+
+      # ── Linux ──────────────────────────────────────────────────────────────
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp -r "build/VERTIGO_artefacts/Release/VST3/VERTIGO.vst3" dist/
+          cp scripts/install-linux.sh dist/
+          chmod +x dist/install-linux.sh
+          cd dist && zip -r ../${{ matrix.zip }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.zip }}
+          retention-days: 14
+
+  # ── GitHub Release (tag pushes only) ───────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: false
+          body: |
+            ## VERTIGO — Build-up Effect VST3
+
+            One-knob build-up engine. Automate **BUILD** 0→1 over your break bus and it sweeps HPF, opens reverb, fires an accelerating snare rush, lifts a riser, then drops a short gap right before the downbeat.
+
+            ---
+
+            ### Install
+
+            | Platform | Download | How to install |
+            |----------|----------|----------------|
+            | **macOS** (Intel + Apple Silicon) | `VERTIGO-mac.zip` | Unzip → double-click `install-mac.command` |
+            | **Windows** | `VERTIGO-windows.zip` | Unzip → double-click `install-windows.bat` |
+            | **Linux** | `VERTIGO-linux.zip` | Unzip → run `./install-linux.sh` |
+
+            After install, rescan plugins in your DAW — look for **VERTIGO** in the VST3 list.
+
+            > **macOS note:** If macOS blocks the install script, right-click it → Open → Open.
+
+            ---
+
+            ### Presets
+            - **Melodic House** — subtle HPF + gentle space, late snare entry
+            - **Indie Dance** *(default)* — balanced across all modules
+            - **Big Room** — aggressive sweep, loud snare rush, full stutter
+            - **Techno** — hard HPF, no riser, heavy gate/stutter
