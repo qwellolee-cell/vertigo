@@ -76,6 +76,12 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     spaceVerb.prepare(spec);
     driveModule.prepare(spec);
 
+    // M4: Snare Rush
+    snareRush.prepare(spec);
+
+    // Allocate generators buffer
+    generatorsBuffer.setSize(2, samplesPerBlock, false, true, true);
+
     // Smooth BUILD knob over 50ms to avoid filter frequency jumps
     smoothedBuild.reset(sampleRate, 0.05);
     smoothedBuild.setCurrentAndTargetValue(0.0f);
@@ -105,6 +111,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float hpfDepth     = apvts.getRawParameterValue("hpfDepth")->load();
     const float verbDepth    = apvts.getRawParameterValue("verbDepth")->load();
     const float driveDepth   = apvts.getRawParameterValue("driveDepth")->load();
+    const float snareDepth   = apvts.getRawParameterValue("snareDepth")->load();
     const float outputGainDB = apvts.getRawParameterValue("output")->load();
 
     const float outputGain   = juce::Decibels::decibelsToGain(outputGainDB);
@@ -120,6 +127,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float hpfActivation   = smoothstep(preset.hpfOnset,   preset.hpfFull,   build) * hpfDepth;
     const float verbActivation  = smoothstep(preset.verbOnset,  preset.verbFull,  build) * verbDepth;
     const float driveActivation = smoothstep(preset.driveOnset, preset.driveFull, build) * driveDepth;
+    const float snareActivation = smoothstep(preset.snareOnset, preset.snareFull, build) * snareDepth;
 
     // M2: Update HPF parameters based on activation
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
@@ -127,6 +135,16 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // M3: Update verb + drive parameters
     spaceVerb.setActivation(verbActivation, preset.verbCeil);
     driveModule.setActivation(driveActivation, preset.driveCeil);
+
+    // M4: Snare Rush — get BPM from host or fall back to 120
+    double bpm = 120.0;
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto pos = playHead->getPosition())
+            if (pos->getBpm().hasValue())
+                bpm = *pos->getBpm();
+    }
+    snareRush.setParams(bpm, snareActivation, preset.snareMaxDiv);
 
     // Build audio block for DSP processing
     auto block = juce::dsp::AudioBlock<float>(buffer);
@@ -142,6 +160,20 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // M3: Drive after verb (colours the reverb tail too)
     if (driveActivation > 0.001f)
         driveModule.process(block, driveActivation);
+
+    // --- GENERATORS path (M4+) ---
+    if (numSamples <= generatorsBuffer.getNumSamples())
+    {
+        generatorsBuffer.clear(0, numSamples);
+
+        // M4: Snare Rush
+        if (snareActivation > 0.001f)
+            snareRush.process(generatorsBuffer, numSamples);
+
+        // Add generators into main buffer (M7 will apply proper 3-path blend)
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.addFrom(ch, 0, generatorsBuffer, ch, 0, numSamples);
+    }
 
     // Apply output gain
     buffer.applyGain(outputGain);

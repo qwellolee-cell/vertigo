@@ -7,6 +7,7 @@
 #include "modules/HpfSweep.h"
 #include "modules/SpaceVerb.h"
 #include "modules/DriveModule.h"
+#include "modules/SnareRush.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -51,6 +52,12 @@ private:
     // DSP — M3: Reverb + Drive
     SpaceVerb  spaceVerb;
     DriveModule driveModule;
+
+    // DSP — M4: Snare Rush generator
+    SnareRush snareRush;
+
+    // Generators buffer (stereo, summed into main buffer)
+    juce::AudioBuffer<float> generatorsBuffer;
 
     // Smoothed build value to avoid zipper noise
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBuild;
