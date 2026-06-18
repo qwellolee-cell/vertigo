@@ -62,8 +62,19 @@ VertigoAudioProcessor::VertigoAudioProcessor()
 
 VertigoAudioProcessor::~VertigoAudioProcessor() {}
 
-void VertigoAudioProcessor::prepareToPlay(double /*sampleRate*/, int /*samplesPerBlock*/)
+void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+    spec.numChannels = 2;
+
+    // M2: HPF
+    hpfSweep.prepare(spec);
+
+    // Smooth BUILD knob over 50ms to avoid filter frequency jumps
+    smoothedBuild.reset(sampleRate, 0.05);
+    smoothedBuild.setCurrentAndTargetValue(0.0f);
 }
 
 void VertigoAudioProcessor::releaseResources() {}
@@ -81,7 +92,38 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                           juce::MidiBuffer& /*midiMessages*/)
 {
     juce::ScopedNoDenormals noDenormals;
-    // M1: pass-through — audio passes unchanged
+
+    const int numSamples = buffer.getNumSamples();
+
+    // Read parameters
+    const float buildTarget = apvts.getRawParameterValue("build")->load();
+    const int   presetIndex = static_cast<int>(apvts.getRawParameterValue("preset")->load());
+    const float hpfDepth    = apvts.getRawParameterValue("hpfDepth")->load();
+    const float outputGainDB = apvts.getRawParameterValue("output")->load();
+
+    const float outputGain  = juce::Decibels::decibelsToGain(outputGainDB);
+
+    // Update smoothed build
+    smoothedBuild.setTargetValue(buildTarget);
+
+    // Get current build (block-level approximation — good enough)
+    const float build = smoothedBuild.skip(numSamples);
+
+    // Compute macro activations
+    const PresetParams& preset = kPresets[presetIndex];
+    const float hpfActivation = smoothstep(preset.hpfOnset, preset.hpfFull, build) * hpfDepth;
+
+    // M2: Update HPF parameters based on activation
+    hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
+
+    // Build audio block for DSP processing
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+
+    // M2: Apply HPF on THROUGHPUT path
+    hpfSweep.process(block, hpfActivation);
+
+    // Apply output gain
+    buffer.applyGain(outputGain);
 }
 
 juce::AudioProcessorEditor* VertigoAudioProcessor::createEditor()

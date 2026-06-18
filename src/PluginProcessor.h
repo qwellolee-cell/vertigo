@@ -3,6 +3,9 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "modules/MacroMapping.h"
+#include "modules/HpfSweep.h"
+
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
 public:
@@ -24,7 +27,7 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    double getTailLengthSeconds() const override { return 2.0; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -39,6 +42,12 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // DSP — M2: HPF
+    HpfSweep hpfSweep;
+
+    // Smoothed build value to avoid zipper noise
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBuild;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VertigoAudioProcessor)
 };
