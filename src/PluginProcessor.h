@@ -10,6 +10,7 @@
 #include "modules/SnareRush.h"
 #include "modules/NoiseRiser.h"
 #include "modules/CaptureBuffer.h"
+#include "modules/ImpactCut.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -63,6 +64,12 @@ private:
 
     // DSP — M6: Capture Buffer (stutter/freeze)
     CaptureBuffer captureBuffer;
+
+    // DSP — M8: Impact Cut (wired in M7 for correct signal flow)
+    ImpactCut impactCut;
+
+    // Dry buffer for DRY/WET blend
+    juce::AudioBuffer<float> dryBuffer;
 
     // Generators buffer (stereo, summed into main buffer)
     juce::AudioBuffer<float> generatorsBuffer;

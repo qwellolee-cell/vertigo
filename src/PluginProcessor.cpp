@@ -85,6 +85,12 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // M6: Capture Buffer
     captureBuffer.prepare(spec);
 
+    // M8: Impact Cut
+    impactCut.prepare(spec);
+
+    // Dry buffer for DRY/WET blend
+    dryBuffer.setSize(2, samplesPerBlock, false, true, true);
+
     // Allocate generators buffer
     generatorsBuffer.setSize(2, samplesPerBlock, false, true, true);
 
@@ -112,95 +118,117 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const int numSamples = buffer.getNumSamples();
 
     // Read parameters
-    const float buildTarget  = apvts.getRawParameterValue("build")->load();
-    const int   presetIndex  = static_cast<int>(apvts.getRawParameterValue("preset")->load());
-    const float hpfDepth     = apvts.getRawParameterValue("hpfDepth")->load();
-    const float verbDepth    = apvts.getRawParameterValue("verbDepth")->load();
-    const float driveDepth   = apvts.getRawParameterValue("driveDepth")->load();
-    const float snareDepth   = apvts.getRawParameterValue("snareDepth")->load();
-    const float riserDepth   = apvts.getRawParameterValue("riserDepth")->load();
-    const float gateDepth    = apvts.getRawParameterValue("gateDepth")->load();
-    const float outputGainDB = apvts.getRawParameterValue("output")->load();
+    // --- M7: Read all parameters ---
+    const float buildTarget    = apvts.getRawParameterValue("build")->load();
+    const int   presetIndex    = static_cast<int>(apvts.getRawParameterValue("preset")->load());
+    const float mixWet         = apvts.getRawParameterValue("mix")->load();
+    const float hpfDepth       = apvts.getRawParameterValue("hpfDepth")->load();
+    const float verbDepth      = apvts.getRawParameterValue("verbDepth")->load();
+    const float driveDepth     = apvts.getRawParameterValue("driveDepth")->load();
+    const float snareDepth     = apvts.getRawParameterValue("snareDepth")->load();
+    const float riserDepth     = apvts.getRawParameterValue("riserDepth")->load();
+    const float gateDepth      = apvts.getRawParameterValue("gateDepth")->load();
+    const float impactDepth    = apvts.getRawParameterValue("impactDepth")->load();
+    const float outputGainDB   = apvts.getRawParameterValue("output")->load();
+    const float outputGain     = juce::Decibels::decibelsToGain(outputGainDB);
 
-    const float outputGain   = juce::Decibels::decibelsToGain(outputGainDB);
-
-    // Update smoothed build
+    // Smooth BUILD over 50ms
     smoothedBuild.setTargetValue(buildTarget);
-
-    // Get current build (block-level approximation — good enough)
     const float build = smoothedBuild.skip(numSamples);
 
-    // Compute macro activations
+    // --- Macro activations via smoothstep + preset table ---
     const PresetParams& preset = kPresets[presetIndex];
-    const float hpfActivation   = smoothstep(preset.hpfOnset,   preset.hpfFull,   build) * hpfDepth;
-    const float verbActivation  = smoothstep(preset.verbOnset,  preset.verbFull,  build) * verbDepth;
-    const float driveActivation = smoothstep(preset.driveOnset, preset.driveFull, build) * driveDepth;
-    const float snareActivation = smoothstep(preset.snareOnset, preset.snareFull, build) * snareDepth;
-    const float riserActivation = smoothstep(preset.riserOnset, preset.riserFull, build) * riserDepth;
-    const float gateActivation  = smoothstep(preset.gateOnset,  preset.gateFull,  build) * gateDepth;
+    const float hpfActivation    = smoothstep(preset.hpfOnset,    preset.hpfFull,    build) * hpfDepth;
+    const float verbActivation   = smoothstep(preset.verbOnset,   preset.verbFull,   build) * verbDepth;
+    const float driveActivation  = smoothstep(preset.driveOnset,  preset.driveFull,  build) * driveDepth;
+    const float snareActivation  = smoothstep(preset.snareOnset,  preset.snareFull,  build) * snareDepth;
+    const float riserActivation  = smoothstep(preset.riserOnset,  preset.riserFull,  build) * riserDepth;
+    const float gateActivation   = smoothstep(preset.gateOnset,   preset.gateFull,   build) * gateDepth;
+    const float impactActivation = smoothstep(preset.impactOnset, 1.0f,              build) * impactDepth;
 
-    // M2: Update HPF parameters based on activation
+    // --- Update DSP module parameters ---
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
-
-    // M3: Update verb + drive parameters
     spaceVerb.setActivation(verbActivation, preset.verbCeil);
     driveModule.setActivation(driveActivation, preset.driveCeil);
+    impactCut.setActivation(impactActivation, preset.impactGapDepth);
 
-    // M4: Snare Rush — get BPM from host or fall back to 120
+    // BPM from host or fallback
     double bpm = 120.0;
     if (auto* playHead = getPlayHead())
-    {
         if (auto pos = playHead->getPosition())
             if (pos->getBpm().hasValue())
                 bpm = *pos->getBpm();
-    }
+
     snareRush.setParams(bpm, snareActivation, preset.snareMaxDiv);
-
-    // M5: Noise Riser
     noiseRiser.setActivation(riserActivation, preset.riserCeil);
-
-    // M6: Capture Buffer stutter/freeze
     captureBuffer.setParams(bpm, gateActivation, preset.gateOnset);
 
-    // Build audio block for DSP processing
+    // --- Save dry signal before processing (for DRY/WET blend) ---
+    if (numSamples <= dryBuffer.getNumSamples())
+    {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            dryBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+    }
+
+    // =====================================================================
+    // PATH 1: THROUGHPUT (live input processed)
+    // =====================================================================
     auto block = juce::dsp::AudioBlock<float>(buffer);
 
-    // --- THROUGHPUT path ---
-    // M2: HPF sweep
+    // HPF sweep (M2)
     hpfSweep.process(block, hpfActivation);
 
-    // M3: Reverb after HPF (fed by mid/high content)
+    // Reverb after HPF (M3)
     if (verbActivation > 0.001f)
         spaceVerb.process(block);
 
-    // M3: Drive after verb (colours the reverb tail too)
+    // Drive after verb (M3)
     if (driveActivation > 0.001f)
         driveModule.process(block, driveActivation);
 
-    // M6: Capture Buffer — writes the post-HPF/verb/drive signal into ring buffer
-    // and replaces output with looped slice when gate is active
+    // Capture Buffer: stutter/freeze from throughput signal (M6)
     if (gateActivation > 0.001f)
         captureBuffer.process(buffer, numSamples);
 
-    // --- GENERATORS path (M4+) ---
+    // =====================================================================
+    // PATH 2: GENERATORS (snare rush + noise riser)
+    // =====================================================================
     if (numSamples <= generatorsBuffer.getNumSamples())
     {
         generatorsBuffer.clear(0, numSamples);
 
-        // M4: Snare Rush
         if (snareActivation > 0.001f)
             snareRush.process(generatorsBuffer, numSamples);
 
-        // M5: Noise Riser
         if (riserActivation > 0.001f)
             noiseRiser.process(generatorsBuffer, numSamples);
 
-        // Add generators into main buffer (M7 will apply proper 3-path blend)
+        // Sum GENERATORS into the wet signal
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
             buffer.addFrom(ch, 0, generatorsBuffer, ch, 0, numSamples);
     }
 
-    // Apply output gain
+    // =====================================================================
+    // PATH 3: DRY/WET blend — mix dry original with processed wet
+    // =====================================================================
+    if (mixWet < 0.9999f && numSamples <= dryBuffer.getNumSamples())
+    {
+        const float dryGain = 1.0f - mixWet;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            buffer.applyGain(ch, 0, numSamples, mixWet);
+            buffer.addFromWithRamp(ch, 0, dryBuffer.getReadPointer(ch), numSamples,
+                                   dryGain, dryGain);
+        }
+    }
+
+    // =====================================================================
+    // Impact cut (M8) — applied to final mix
+    // =====================================================================
+    if (impactActivation > 0.001f)
+        impactCut.process(buffer, numSamples);
+
+    // Output gain
     buffer.applyGain(outputGain);
 }
 

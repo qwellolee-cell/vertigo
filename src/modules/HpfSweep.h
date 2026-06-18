@@ -21,7 +21,7 @@ public:
     }
 
     /** activation 0..1, onset/full already computed by caller via smoothstep */
-    void setActivation(float activation, float minHz, float ceilHz, float maxResonance)
+    void setActivation(float activation, float /*minHz*/, float ceilHz, float maxResonance)
     {
         if (activation <= 0.0f)
         {
