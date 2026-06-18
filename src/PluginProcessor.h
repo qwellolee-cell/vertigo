@@ -8,6 +8,7 @@
 #include "modules/SpaceVerb.h"
 #include "modules/DriveModule.h"
 #include "modules/SnareRush.h"
+#include "modules/NoiseRiser.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -55,6 +56,9 @@ private:
 
     // DSP — M4: Snare Rush generator
     SnareRush snareRush;
+
+    // DSP — M5: Noise Riser generator
+    NoiseRiser noiseRiser;
 
     // Generators buffer (stereo, summed into main buffer)
     juce::AudioBuffer<float> generatorsBuffer;

@@ -79,6 +79,9 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // M4: Snare Rush
     snareRush.prepare(spec);
 
+    // M5: Noise Riser
+    noiseRiser.prepare(spec);
+
     // Allocate generators buffer
     generatorsBuffer.setSize(2, samplesPerBlock, false, true, true);
 
@@ -112,6 +115,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float verbDepth    = apvts.getRawParameterValue("verbDepth")->load();
     const float driveDepth   = apvts.getRawParameterValue("driveDepth")->load();
     const float snareDepth   = apvts.getRawParameterValue("snareDepth")->load();
+    const float riserDepth   = apvts.getRawParameterValue("riserDepth")->load();
     const float outputGainDB = apvts.getRawParameterValue("output")->load();
 
     const float outputGain   = juce::Decibels::decibelsToGain(outputGainDB);
@@ -128,6 +132,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float verbActivation  = smoothstep(preset.verbOnset,  preset.verbFull,  build) * verbDepth;
     const float driveActivation = smoothstep(preset.driveOnset, preset.driveFull, build) * driveDepth;
     const float snareActivation = smoothstep(preset.snareOnset, preset.snareFull, build) * snareDepth;
+    const float riserActivation = smoothstep(preset.riserOnset, preset.riserFull, build) * riserDepth;
 
     // M2: Update HPF parameters based on activation
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
@@ -145,6 +150,9 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                 bpm = *pos->getBpm();
     }
     snareRush.setParams(bpm, snareActivation, preset.snareMaxDiv);
+
+    // M5: Noise Riser
+    noiseRiser.setActivation(riserActivation, preset.riserCeil);
 
     // Build audio block for DSP processing
     auto block = juce::dsp::AudioBlock<float>(buffer);
@@ -169,6 +177,10 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         // M4: Snare Rush
         if (snareActivation > 0.001f)
             snareRush.process(generatorsBuffer, numSamples);
+
+        // M5: Noise Riser
+        if (riserActivation > 0.001f)
+            noiseRiser.process(generatorsBuffer, numSamples);
 
         // Add generators into main buffer (M7 will apply proper 3-path blend)
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
