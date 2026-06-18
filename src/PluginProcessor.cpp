@@ -72,6 +72,10 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // M2: HPF
     hpfSweep.prepare(spec);
 
+    // M3: Verb + Drive
+    spaceVerb.prepare(spec);
+    driveModule.prepare(spec);
+
     // Smooth BUILD knob over 50ms to avoid filter frequency jumps
     smoothedBuild.reset(sampleRate, 0.05);
     smoothedBuild.setCurrentAndTargetValue(0.0f);
@@ -96,12 +100,14 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const int numSamples = buffer.getNumSamples();
 
     // Read parameters
-    const float buildTarget = apvts.getRawParameterValue("build")->load();
-    const int   presetIndex = static_cast<int>(apvts.getRawParameterValue("preset")->load());
-    const float hpfDepth    = apvts.getRawParameterValue("hpfDepth")->load();
+    const float buildTarget  = apvts.getRawParameterValue("build")->load();
+    const int   presetIndex  = static_cast<int>(apvts.getRawParameterValue("preset")->load());
+    const float hpfDepth     = apvts.getRawParameterValue("hpfDepth")->load();
+    const float verbDepth    = apvts.getRawParameterValue("verbDepth")->load();
+    const float driveDepth   = apvts.getRawParameterValue("driveDepth")->load();
     const float outputGainDB = apvts.getRawParameterValue("output")->load();
 
-    const float outputGain  = juce::Decibels::decibelsToGain(outputGainDB);
+    const float outputGain   = juce::Decibels::decibelsToGain(outputGainDB);
 
     // Update smoothed build
     smoothedBuild.setTargetValue(buildTarget);
@@ -111,16 +117,31 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     // Compute macro activations
     const PresetParams& preset = kPresets[presetIndex];
-    const float hpfActivation = smoothstep(preset.hpfOnset, preset.hpfFull, build) * hpfDepth;
+    const float hpfActivation   = smoothstep(preset.hpfOnset,   preset.hpfFull,   build) * hpfDepth;
+    const float verbActivation  = smoothstep(preset.verbOnset,  preset.verbFull,  build) * verbDepth;
+    const float driveActivation = smoothstep(preset.driveOnset, preset.driveFull, build) * driveDepth;
 
     // M2: Update HPF parameters based on activation
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
 
+    // M3: Update verb + drive parameters
+    spaceVerb.setActivation(verbActivation, preset.verbCeil);
+    driveModule.setActivation(driveActivation, preset.driveCeil);
+
     // Build audio block for DSP processing
     auto block = juce::dsp::AudioBlock<float>(buffer);
 
-    // M2: Apply HPF on THROUGHPUT path
+    // --- THROUGHPUT path ---
+    // M2: HPF sweep
     hpfSweep.process(block, hpfActivation);
+
+    // M3: Reverb after HPF (fed by mid/high content)
+    if (verbActivation > 0.001f)
+        spaceVerb.process(block);
+
+    // M3: Drive after verb (colours the reverb tail too)
+    if (driveActivation > 0.001f)
+        driveModule.process(block, driveActivation);
 
     // Apply output gain
     buffer.applyGain(outputGain);

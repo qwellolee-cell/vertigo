@@ -5,6 +5,8 @@
 
 #include "modules/MacroMapping.h"
 #include "modules/HpfSweep.h"
+#include "modules/SpaceVerb.h"
+#include "modules/DriveModule.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -45,6 +47,10 @@ private:
 
     // DSP — M2: HPF
     HpfSweep hpfSweep;
+
+    // DSP — M3: Reverb + Drive
+    SpaceVerb  spaceVerb;
+    DriveModule driveModule;
 
     // Smoothed build value to avoid zipper noise
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBuild;
