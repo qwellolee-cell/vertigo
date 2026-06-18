@@ -154,8 +154,8 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     // BPM from host or fallback
     double bpm = 120.0;
-    if (auto* playHead = getPlayHead())
-        if (auto pos = playHead->getPosition())
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
             if (pos->getBpm().hasValue())
                 bpm = *pos->getBpm();
 

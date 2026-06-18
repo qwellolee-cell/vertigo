@@ -28,13 +28,13 @@ public:
         if (activation <= 0.001f)
             return;
 
-        const int numChannels = static_cast<int>(block.getNumChannels());
-        const int numSamples  = static_cast<int>(block.getNumSamples());
+        const auto numChannels = block.getNumChannels();
+        const auto numSamples  = block.getNumSamples();
 
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (size_t ch = 0; ch < numChannels; ++ch)
         {
             float* data = block.getChannelPointer(ch);
-            for (int i = 0; i < numSamples; ++i)
+            for (size_t i = 0; i < numSamples; ++i)
             {
                 data[i] = std::tanh(data[i] * driveAmount) * compensationGain;
             }
