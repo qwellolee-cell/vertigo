@@ -117,13 +117,14 @@ VertigoAudioProcessorEditor::VertigoAudioProcessorEditor(VertigoAudioProcessor& 
     addAndMakeVisible(presetLabel);
 
     // ---- Depth trim knobs ----
-    setupKnob(hpfKnob,    hpfLabel,    "HPF");
-    setupKnob(verbKnob,   verbLabel,   "SPACE");
-    setupKnob(snareKnob,  snareLabel,  "SNARE");
-    setupKnob(riserKnob,  riserLabel,  "RISER");
-    setupKnob(gateKnob,   gateLabel,   "GATE");
-    setupKnob(driveKnob,  driveLabel,  "DRIVE");
-    setupKnob(impactKnob, impactLabel, "IMPACT");
+    setupKnob(hpfKnob,     hpfLabel,     "HPF");
+    setupKnob(verbKnob,    verbLabel,    "SPACE");
+    setupKnob(snareKnob,   snareLabel,   "SNARE");
+    setupKnob(riserKnob,   riserLabel,   "RISER");
+    setupKnob(gateKnob,    gateLabel,    "GATE");
+    setupKnob(driveKnob,   driveLabel,   "DRIVE");
+    setupKnob(ppDelayKnob, ppDelayLabel, "P.PONG");
+    setupKnob(impactKnob,  impactLabel,  "IMPACT");
 
     // ---- Mix / Output ----
     setupKnob(mixKnob,    mixLabel,    "MIX");
@@ -134,14 +135,15 @@ VertigoAudioProcessorEditor::VertigoAudioProcessorEditor(VertigoAudioProcessor& 
     buildAtt  = std::make_unique<SliderAttachment>(apvts, "build",       buildKnob);
     mixAtt    = std::make_unique<SliderAttachment>(apvts, "mix",         mixKnob);
     outputAtt = std::make_unique<SliderAttachment>(apvts, "output",      outputKnob);
-    hpfAtt    = std::make_unique<SliderAttachment>(apvts, "hpfDepth",    hpfKnob);
-    verbAtt   = std::make_unique<SliderAttachment>(apvts, "verbDepth",   verbKnob);
-    snareAtt  = std::make_unique<SliderAttachment>(apvts, "snareDepth",  snareKnob);
-    riserAtt  = std::make_unique<SliderAttachment>(apvts, "riserDepth",  riserKnob);
-    gateAtt   = std::make_unique<SliderAttachment>(apvts, "gateDepth",   gateKnob);
-    driveAtt  = std::make_unique<SliderAttachment>(apvts, "driveDepth",  driveKnob);
-    impactAtt = std::make_unique<SliderAttachment>(apvts, "impactDepth", impactKnob);
-    presetAtt = std::make_unique<ComboAttachment> (apvts, "preset",      presetBox);
+    hpfAtt      = std::make_unique<SliderAttachment>(apvts, "hpfDepth",     hpfKnob);
+    verbAtt     = std::make_unique<SliderAttachment>(apvts, "verbDepth",    verbKnob);
+    snareAtt    = std::make_unique<SliderAttachment>(apvts, "snareDepth",   snareKnob);
+    riserAtt    = std::make_unique<SliderAttachment>(apvts, "riserDepth",   riserKnob);
+    gateAtt     = std::make_unique<SliderAttachment>(apvts, "gateDepth",    gateKnob);
+    driveAtt    = std::make_unique<SliderAttachment>(apvts, "driveDepth",   driveKnob);
+    ppDelayAtt  = std::make_unique<SliderAttachment>(apvts, "pingPongDepth", ppDelayKnob);
+    impactAtt   = std::make_unique<SliderAttachment>(apvts, "impactDepth",  impactKnob);
+    presetAtt   = std::make_unique<ComboAttachment> (apvts, "preset",       presetBox);
 }
 
 VertigoAudioProcessorEditor::~VertigoAudioProcessorEditor()
