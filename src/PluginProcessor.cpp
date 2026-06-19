@@ -42,6 +42,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout VertigoAudioProcessor::creat
         juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "pingPongDepth", 1 }, "PING PONG",
+        juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "impactDepth", 1 }, "IMPACT",
         juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f));
 
@@ -88,6 +92,14 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // M8: Impact Cut
     impactCut.prepare(spec);
 
+    // Ping Pong Delay
+    pingPongDelay.prepare(spec);
+
+    // Output Limiter — threshold -1 dBFS, 100ms release, always on
+    limiter.prepare(spec);
+    limiter.setThreshold(-1.0f);
+    limiter.setRelease(100.0f);
+
     // Dry buffer for DRY/WET blend
     dryBuffer.setSize(2, samplesPerBlock, false, true, true);
 
@@ -125,6 +137,7 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     const float hpfDepth       = apvts.getRawParameterValue("hpfDepth")->load();
     const float verbDepth      = apvts.getRawParameterValue("verbDepth")->load();
     const float driveDepth     = apvts.getRawParameterValue("driveDepth")->load();
+    const float pingPongDepth  = apvts.getRawParameterValue("pingPongDepth")->load();
     const float snareDepth     = apvts.getRawParameterValue("snareDepth")->load();
     const float riserDepth     = apvts.getRawParameterValue("riserDepth")->load();
     const float gateDepth      = apvts.getRawParameterValue("gateDepth")->load();
@@ -152,13 +165,25 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     driveModule.setActivation(driveActivation, preset.driveCeil);
     impactCut.setActivation(impactActivation, preset.impactGapDepth);
 
-    // BPM from host or fallback
+    // BPM and PPQ position from host or fallback
     double bpm = 120.0;
+    double ppqPosition = 0.0;
+    bool hasPpq = false;
     if (auto* ph = getPlayHead())
+    {
         if (auto pos = ph->getPosition())
+        {
             if (pos->getBpm().hasValue())
                 bpm = *pos->getBpm();
+            if (pos->getPpqPosition().hasValue())
+            {
+                ppqPosition = *pos->getPpqPosition();
+                hasPpq = true;
+            }
+        }
+    }
 
+    pingPongDelay.setBpm(bpm);
     snareRush.setParams(bpm, snareActivation, preset.snareMaxDiv);
     noiseRiser.setActivation(riserActivation, preset.riserCeil);
     captureBuffer.setParams(bpm, gateActivation, preset.gateOnset);
@@ -182,7 +207,14 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     if (verbActivation > 0.001f)
         spaceVerb.process(block);
 
-    // Drive after verb (M3)
+    // Ping Pong Delay — after SpaceVerb, before Drive
+    {
+        const float ppActivation = smoothstep(preset.ppOnset, preset.ppFull, build);
+        const float ppWet = ppActivation * preset.ppWetCeil * pingPongDepth;
+        pingPongDelay.process(buffer, ppWet);
+    }
+
+    // Drive after verb + ping pong (M3)
     if (driveActivation > 0.001f)
         driveModule.process(block, driveActivation);
 
@@ -198,7 +230,13 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         generatorsBuffer.clear(0, numSamples);
 
         if (snareActivation > 0.001f)
-            snareRush.process(generatorsBuffer, numSamples);
+        {
+            if (hasPpq)
+                snareRush.process(generatorsBuffer, snareActivation, snareDepth,
+                                  getSampleRate(), bpm, ppqPosition, numSamples);
+            else
+                snareRush.process(generatorsBuffer, numSamples);
+        }
 
         if (riserActivation > 0.001f)
             noiseRiser.process(generatorsBuffer, numSamples);
@@ -230,6 +268,13 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     // Output gain
     buffer.applyGain(outputGain);
+
+    // Output Limiter — always on, last in chain
+    {
+        auto limiterBlock = juce::dsp::AudioBlock<float>(buffer);
+        auto limiterCtx   = juce::dsp::ProcessContextReplacing<float>(limiterBlock);
+        limiter.process(limiterCtx);
+    }
 }
 
 juce::AudioProcessorEditor* VertigoAudioProcessor::createEditor()

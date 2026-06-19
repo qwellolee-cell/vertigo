@@ -11,6 +11,7 @@
 #include "modules/NoiseRiser.h"
 #include "modules/CaptureBuffer.h"
 #include "modules/ImpactCut.h"
+#include "modules/PingPongDelay.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -67,6 +68,12 @@ private:
 
     // DSP — M8: Impact Cut (wired in M7 for correct signal flow)
     ImpactCut impactCut;
+
+    // DSP — Ping Pong Delay (on throughput, after SpaceVerb, before Drive)
+    PingPongDelay pingPongDelay;
+
+    // DSP — Output Limiter (always on, last in chain)
+    juce::dsp::Limiter<float> limiter;
 
     // Dry buffer for DRY/WET blend
     juce::AudioBuffer<float> dryBuffer;

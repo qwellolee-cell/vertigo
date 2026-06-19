@@ -49,6 +49,11 @@ struct PresetParams
     // Impact
     float impactOnset;
     float impactGapDepth; // 0..1 duck depth
+
+    // Ping Pong Delay
+    float ppOnset;
+    float ppFull;
+    float ppWetCeil;
 };
 
 // Preset indices match APVTS choice order
@@ -62,7 +67,8 @@ static const PresetParams kPresets[4] =
       0.64f, 0.97f, 0.55f,             // riser
       2.00f, 2.00f, 0.00f,             // gate (off)
       0.58f, 0.90f, 0.35f,             // drive
-      0.95f, 0.45f },                  // impact
+      0.95f, 0.45f,                    // impact
+      0.35f, 0.85f, 0.40f },           // ping pong
 
     // 1: Indie Dance (default)
     { 0.18f, 0.92f, 780.0f,  1.50f,   // hpf
@@ -71,7 +77,8 @@ static const PresetParams kPresets[4] =
       0.56f, 0.98f, 0.70f,             // riser
       0.80f, 0.96f, 0.50f,             // gate
       0.54f, 0.90f, 0.50f,             // drive
-      0.96f, 0.70f },                  // impact
+      0.96f, 0.70f,                    // impact
+      0.30f, 0.85f, 0.50f },           // ping pong
 
     // 2: Big Room
     { 0.14f, 0.90f, 950.0f,  2.00f,   // hpf
@@ -80,7 +87,8 @@ static const PresetParams kPresets[4] =
       0.50f, 0.98f, 1.00f,             // riser
       0.72f, 0.95f, 0.85f,             // gate
       0.55f, 0.92f, 0.80f,             // drive
-      0.97f, 1.00f },                  // impact
+      0.97f, 1.00f,                    // impact
+      0.25f, 0.88f, 0.65f },           // ping pong
 
     // 3: Techno
     { 0.10f, 0.88f, 1100.0f, 2.30f,   // hpf
@@ -89,7 +97,8 @@ static const PresetParams kPresets[4] =
       2.00f, 2.00f, 0.00f,             // riser (off)
       0.60f, 0.94f, 1.00f,             // gate
       0.45f, 0.90f, 0.70f,             // drive
-      0.94f, 0.90f }                   // impact
+      0.94f, 0.90f,                    // impact
+      0.35f, 0.85f, 0.45f }            // ping pong
 };
 
 /** Compute all per-effect activations from BUILD knob + preset */
@@ -102,6 +111,7 @@ struct EffectActivations
     float gate;
     float drive;
     float impact;
+    float pp;
 };
 
 inline EffectActivations computeActivations(float build, int presetIndex)
@@ -116,5 +126,6 @@ inline EffectActivations computeActivations(float build, int presetIndex)
     a.gate   = smoothstep(p.gateOnset,   p.gateFull,   build);
     a.drive  = smoothstep(p.driveOnset,  p.driveFull,  build);
     a.impact = smoothstep(p.impactOnset, 1.0f,         build);
+    a.pp     = smoothstep(p.ppOnset,     p.ppFull,     build);
     return a;
 }

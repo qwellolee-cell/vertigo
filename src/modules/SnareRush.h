@@ -46,6 +46,22 @@ public:
     }
 
     /**
+     * Set BPM for subdivision calculation.
+     */
+    void setBpm(double bpm)
+    {
+        currentBpm = bpm;
+    }
+
+    /**
+     * Set subdivision (e.g. 8, 16, 32, 64).
+     */
+    void setSubdivision(int div)
+    {
+        currentDiv = juce::jlimit(1, 256, div);
+    }
+
+    /**
      * Set tempo and activation level.
      * bpm: current host BPM (or 120 fallback)
      * activation: 0..1 from smoothstep macro
@@ -54,6 +70,7 @@ public:
     void setParams(double bpm, float activation, int maxDiv)
     {
         currentActivation = activation;
+        currentBpm = bpm;
 
         if (activation <= 0.001f)
         {
@@ -75,6 +92,7 @@ public:
         int divIdx = juce::roundToInt(activation * static_cast<float>(maxIdx));
         divIdx = juce::jlimit(0, maxIdx, divIdx);
         int subdivision = divLadder[divIdx];
+        currentDiv = subdivision;
 
         // Interval in samples = (60 / bpm) * (4 / subdivision) * sampleRate
         double beatSec = 60.0 / bpm;
@@ -95,6 +113,7 @@ public:
     /**
      * Fill outputBuffer (add into it — does NOT clear it first).
      * Caller is responsible for clearing before calling generators.
+     * Legacy overload using internal sample counter.
      */
     void process(juce::AudioBuffer<float>& outputBuffer, int numSamples)
     {
@@ -120,6 +139,63 @@ public:
             for (int ch = 0; ch < numChannels; ++ch)
                 outputBuffer.addSample(ch, i, scaled);
         }
+    }
+
+    /**
+     * Transport-locked process overload using host PPQ position.
+     * Triggers on exact beat subdivision boundaries, eliminating drift.
+     */
+    void process(juce::AudioBuffer<float>& outputBuffer, float activation, float depth,
+                 double sr, double bpm, double ppqPositionAtBlockStart, int samplesInBlock)
+    {
+        if (activation <= 0.001f || currentDiv <= 0)
+            return;
+
+        // Update decay params if activation changed
+        if (activation != currentActivation)
+        {
+            currentActivation = activation;
+            double decayMs = 120.0 - activation * 60.0;
+            noiseDecay = static_cast<float>(std::pow(0.001, 1.0 / (decayMs * 0.001 * sr)));
+            bodyDecay  = static_cast<float>(std::pow(0.001, 1.0 / (80.0 * 0.001 * sr)));
+            attackSamples = static_cast<int>(0.001 * sr);
+            if (attackSamples < 1) attackSamples = 1;
+        }
+
+        // subdivision in quarter notes: e.g. 1/16 = 0.25 QN
+        double subdivQN = 4.0 / static_cast<double>(currentDiv);
+        const int numChannels = outputBuffer.getNumChannels();
+
+        for (int i = 0; i < samplesInBlock; ++i)
+        {
+            // ppq position of this sample
+            double ppq = ppqPositionAtBlockStart + (double)i * bpm / (sr * 60.0);
+
+            // check if this sample crosses a subdivision boundary
+            bool crossesBoundary = false;
+            if (i == 0)
+            {
+                // For first sample, check against stored previous ppq
+                crossesBoundary = (int)(ppq / subdivQN) > (int)(lastPpq / subdivQN);
+            }
+            else
+            {
+                double prevPpq = ppqPositionAtBlockStart + (double)(i - 1) * bpm / (sr * 60.0);
+                crossesBoundary = (int)(ppq / subdivQN) > (int)(prevPpq / subdivQN);
+            }
+
+            if (crossesBoundary)
+                triggerSnare();
+
+            float snare = generateSample();
+            float scaled = snare * activation * depth;
+
+            for (int ch = 0; ch < numChannels; ++ch)
+                outputBuffer.addSample(ch, i, scaled);
+        }
+
+        // Store last ppq for next block boundary check
+        lastPpq = ppqPositionAtBlockStart + (double)(samplesInBlock - 1) * bpm / (sr * 60.0);
     }
 
 private:
@@ -175,8 +251,11 @@ private:
     juce::dsp::StateVariableTPTFilter<float> noiseBP;
     juce::Random random;
 
-    double sampleRate      = 44100.0;
+    double sampleRate        = 44100.0;
     float  currentActivation = 0.0f;
+    double currentBpm        = 120.0;
+    int    currentDiv        = 16;
+    double lastPpq           = 0.0;
 
     float  noiseEnv       = 0.0f;
     float  bodyEnv        = 0.0f;
