@@ -1,21 +1,94 @@
 #include "PluginEditor.h"
 
 //==============================================================================
+// Desert Vision palette
+//==============================================================================
+namespace VertigoColors
+{
+    const juce::Colour bg        = juce::Colour(0xffEAE8E1); // warm beige
+    const juce::Colour bgPanel   = juce::Colour(0xffE0DDD3); // slightly darker beige for subtle panels
+    const juce::Colour ink       = juce::Colour(0xff1A1A1A); // near-black line-art / text
+    const juce::Colour inkSoft   = juce::Colour(0xff8A8780); // muted grey for inactive arcs / secondary text
+    const juce::Colour accent    = juce::Colour(0xff6B2D8B); // restrained deep purple — BUILD hero active arc
+}
+
+namespace
+{
+    // A light, generously-tracked font for the editorial look. JUCE's tracking is
+    // expressed as a fraction of the font height via withExtraKerningFactor.
+    juce::Font lightFont(float height, float tracking = 0.18f)
+    {
+        return juce::Font(juce::FontOptions(height)
+                              .withStyle("Regular"))
+            .withExtraKerningFactor(tracking);
+    }
+
+    // Draws a small Archimedean spiral centred at (cx, cy). Used both for the
+    // BUILD vortex and (smaller) inside the brand-mark eye.
+    void drawSpiral(juce::Graphics& g, float cx, float cy, float maxR,
+                    int turns, float strokeW, juce::Colour colour, float step = 0.12f)
+    {
+        juce::Path spiral;
+        const float total = (float) turns * juce::MathConstants<float>::twoPi;
+        bool first = true;
+        for (float t = 0.0f; t <= total; t += step)
+        {
+            const float r  = maxR * (t / total);
+            const float px = cx + std::cos(t) * r;
+            const float py = cy + std::sin(t) * r;
+            if (first) { spiral.startNewSubPath(px, py); first = false; }
+            else        spiral.lineTo(px, py);
+        }
+        g.setColour(colour);
+        g.strokePath(spiral, juce::PathStrokeType(strokeW, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+    }
+}
+
+//==============================================================================
 // VertigoLookAndFeel
 //==============================================================================
 
 VertigoAudioProcessorEditor::VertigoLookAndFeel::VertigoLookAndFeel()
 {
-    setColour(juce::Slider::rotarySliderFillColourId,   juce::Colour(0xffe94560));
-    setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff3a3a5c));
-    setColour(juce::Slider::thumbColourId,              juce::Colour(0xffe94560));
-    setColour(juce::Label::textColourId,                juce::Colour(0xffccccdd));
-    setColour(juce::ComboBox::backgroundColourId,       juce::Colour(0xff16213e));
-    setColour(juce::ComboBox::textColourId,             juce::Colour(0xffccccdd));
-    setColour(juce::ComboBox::outlineColourId,          juce::Colour(0xff3a3a5c));
-    setColour(juce::PopupMenu::backgroundColourId,      juce::Colour(0xff16213e));
-    setColour(juce::PopupMenu::textColourId,            juce::Colour(0xffccccdd));
-    setColour(juce::PopupMenu::highlightedBackgroundColourId, juce::Colour(0xffe94560));
+    using namespace VertigoColors;
+
+    // Rotary
+    setColour(juce::Slider::rotarySliderFillColourId,    accent);
+    setColour(juce::Slider::rotarySliderOutlineColourId, inkSoft);
+    setColour(juce::Slider::thumbColourId,               ink);
+
+    // Labels
+    setColour(juce::Label::textColourId,                 ink);
+
+    // Combo box
+    setColour(juce::ComboBox::backgroundColourId,        bgPanel);
+    setColour(juce::ComboBox::textColourId,              ink);
+    setColour(juce::ComboBox::outlineColourId,           ink);
+    setColour(juce::ComboBox::arrowColourId,             ink);
+
+    // Popup menu — beige with ink text, accent highlight
+    setColour(juce::PopupMenu::backgroundColourId,           bg);
+    setColour(juce::PopupMenu::textColourId,                 ink);
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, accent);
+    setColour(juce::PopupMenu::highlightedTextColourId,      bg);
+
+    // Slider value bubble — readable on beige
+    setColour(juce::BubbleComponent::backgroundColourId, bgPanel);
+    setColour(juce::BubbleComponent::outlineColourId,    ink);
+    setColour(juce::TooltipWindow::backgroundColourId,   bgPanel);
+    setColour(juce::TooltipWindow::textColourId,         ink);
+    setColour(juce::TooltipWindow::outlineColourId,      ink);
+}
+
+juce::Font VertigoAudioProcessorEditor::VertigoLookAndFeel::getComboBoxFont(juce::ComboBox&)
+{
+    return lightFont(14.0f, 0.12f);
+}
+
+juce::Font VertigoAudioProcessorEditor::VertigoLookAndFeel::getPopupMenuFont()
+{
+    return lightFont(14.0f, 0.10f);
 }
 
 void VertigoAudioProcessorEditor::VertigoLookAndFeel::drawRotarySlider(
@@ -23,46 +96,123 @@ void VertigoAudioProcessorEditor::VertigoLookAndFeel::drawRotarySlider(
     float sliderPos, float startAngle, float endAngle,
     juce::Slider& slider)
 {
-    const float radius = juce::jmin(w / 2.0f, h / 2.0f) - 4.0f;
+    using namespace VertigoColors;
+
+    const float radius  = juce::jmin(w / 2.0f, h / 2.0f) - 4.0f;
     const float centreX = x + w * 0.5f;
     const float centreY = y + h * 0.5f;
+    const float angle   = startAngle + sliderPos * (endAngle - startAngle);
 
-    // Background track
-    juce::Path backgroundArc;
-    backgroundArc.addCentredArc(centreX, centreY, radius, radius,
-                                  0.0f, startAngle, endAngle, true);
-    g.setColour(findColour(juce::Slider::rotarySliderOutlineColourId));
-    g.strokePath(backgroundArc, juce::PathStrokeType(radius * 0.12f,
-                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    const bool isHero = (slider.getName() == "BUILD") || (radius > 70.0f);
 
-    // Value arc
-    const float angle = startAngle + sliderPos * (endAngle - startAngle);
-    juce::Path valueArc;
-    valueArc.addCentredArc(centreX, centreY, radius, radius,
-                            0.0f, startAngle, angle, true);
-    g.setColour(findColour(juce::Slider::rotarySliderFillColourId));
-    g.strokePath(valueArc, juce::PathStrokeType(radius * 0.12f,
-                 juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-    // Thumb line
-    const float thumbX = centreX + std::sin(angle) * radius * 0.80f;
-    const float thumbY = centreY - std::cos(angle) * radius * 0.80f;
-    g.setColour(juce::Colours::white);
-    g.drawLine(centreX, centreY, thumbX, thumbY, radius * 0.08f);
-
-    // Centre dot
-    g.fillEllipse(centreX - radius * 0.08f, centreY - radius * 0.08f,
-                  radius * 0.16f, radius * 0.16f);
-
-    // For the big build knob, show current value
-    if (slider.getName() == "BUILD")
+    if (isHero)
     {
-        g.setColour(juce::Colour(0xffccccdd));
-        g.setFont(radius * 0.30f);
-        g.drawFittedText(juce::String(slider.getValue(), 2),
-                         (int)(centreX - radius), (int)(centreY - radius * 0.3f),
-                         (int)(radius * 2.0f), (int)(radius * 0.6f),
-                         juce::Justification::centred, 1);
+        //======================= THE VORTEX ===========================
+        // Concentric thin rings, denser toward the centre, for the vertigo
+        // illusion. Use a non-linear spacing so rings crowd inward.
+        const int rings = 7;
+        for (int i = 1; i <= rings; ++i)
+        {
+            const float frac = (float) i / (float) rings;
+            // bias rings toward the centre (squared) so they get denser inward
+            const float rr = radius * (0.20f + 0.62f * (frac * frac));
+            const float a  = 0.18f + 0.30f * frac; // outer rings a touch stronger
+            g.setColour(ink.withAlpha(a));
+            g.drawEllipse(centreX - rr, centreY - rr, rr * 2.0f, rr * 2.0f, 1.2f);
+        }
+
+        // Archimedean spiral on top — the soul of the mark.
+        drawSpiral(g, centreX, centreY, radius * 0.78f, 5, 1.2f, ink.withAlpha(0.55f));
+
+        // A second, counter-rotated faint spiral adds depth / shimmer.
+        {
+            juce::Path s2;
+            const int turns = 5;
+            const float total = (float) turns * juce::MathConstants<float>::twoPi;
+            bool first = true;
+            for (float t = 0.0f; t <= total; t += 0.12f)
+            {
+                const float r  = (radius * 0.70f) * (t / total);
+                const float px = centreX + std::cos(-t + juce::MathConstants<float>::pi) * r;
+                const float py = centreY + std::sin(-t + juce::MathConstants<float>::pi) * r;
+                if (first) { s2.startNewSubPath(px, py); first = false; }
+                else        s2.lineTo(px, py);
+            }
+            g.setColour(ink.withAlpha(0.20f));
+            g.strokePath(s2, juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+        }
+
+        // Outer inactive ring (full sweep) — soft grey guide.
+        {
+            juce::Path track;
+            track.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                                startAngle, endAngle, true);
+            g.setColour(inkSoft.withAlpha(0.55f));
+            g.strokePath(track, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved,
+                                                     juce::PathStrokeType::rounded));
+        }
+
+        // Value arc in restrained purple — the BUILD position.
+        {
+            juce::Path valueArc;
+            valueArc.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                                   startAngle, angle, true);
+            g.setColour(accent);
+            g.strokePath(valueArc, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+        }
+
+        // Thin radial indicator from centre to the current angle.
+        {
+            const float ix = centreX + std::sin(angle) * radius;
+            const float iy = centreY - std::cos(angle) * radius;
+            g.setColour(ink.withAlpha(0.85f));
+            g.drawLine(centreX, centreY, ix, iy, 1.4f);
+            // tiny indicator dot at the rim
+            g.setColour(accent);
+            g.fillEllipse(ix - 2.6f, iy - 2.6f, 5.2f, 5.2f);
+        }
+
+        // Numeric value, centred, light font.
+        g.setColour(ink);
+        g.setFont(lightFont(radius * 0.26f, 0.06f));
+        g.drawText(juce::String(slider.getValue(), 2),
+                   juce::Rectangle<float>(centreX - radius, centreY - radius * 0.30f,
+                                          radius * 2.0f, radius * 0.60f),
+                   juce::Justification::centred);
+    }
+    else
+    {
+        //==================== MINIMAL TRIM KNOB =======================
+        // Light inactive background arc (270° via start/end angle).
+        {
+            juce::Path track;
+            track.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                                startAngle, endAngle, true);
+            g.setColour(inkSoft.withAlpha(0.65f));
+            g.strokePath(track, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved,
+                                                     juce::PathStrokeType::rounded));
+        }
+
+        // Ink value arc.
+        {
+            juce::Path valueArc;
+            valueArc.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                                   startAngle, angle, true);
+            g.setColour(ink);
+            g.strokePath(valueArc, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+        }
+
+        // Tiny indicator dot at the current angle.
+        {
+            const float dotR = radius * 0.86f;
+            const float dx = centreX + std::sin(angle) * dotR;
+            const float dy = centreY - std::cos(angle) * dotR;
+            g.setColour(ink);
+            g.fillEllipse(dx - 2.0f, dy - 2.0f, 4.0f, 4.0f);
+        }
     }
 }
 
@@ -71,20 +221,25 @@ void VertigoAudioProcessorEditor::VertigoLookAndFeel::drawComboBox(
     int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
     juce::ComboBox& box)
 {
-    juce::Rectangle<int> boxBounds(0, 0, w, h);
-    g.setColour(findColour(juce::ComboBox::backgroundColourId));
-    g.fillRoundedRectangle(boxBounds.toFloat(), 4.0f);
-    g.setColour(findColour(juce::ComboBox::outlineColourId));
-    g.drawRoundedRectangle(boxBounds.toFloat().reduced(0.5f, 0.5f), 4.0f, 1.0f);
+    using namespace VertigoColors;
 
-    juce::Rectangle<int> arrowZone(w - 20, 0, 15, h);
-    juce::Path path;
-    path.startNewSubPath((float)arrowZone.getX() + 3.0f,    (float)arrowZone.getCentreY() - 2.0f);
-    path.lineTo((float)arrowZone.getCentreX(),               (float)arrowZone.getCentreY() + 3.0f);
-    path.lineTo((float)arrowZone.getRight() - 3.0f,          (float)arrowZone.getCentreY() - 2.0f);
+    juce::Rectangle<float> boxBounds(0.0f, 0.0f, (float) w, (float) h);
 
-    g.setColour(findColour(juce::ComboBox::textColourId).withAlpha(0.8f));
-    g.strokePath(path, juce::PathStrokeType(1.5f));
+    g.setColour(bgPanel);
+    g.fillRoundedRectangle(boxBounds, 3.0f);
+
+    g.setColour(ink);
+    g.drawRoundedRectangle(boxBounds.reduced(0.6f), 3.0f, 1.2f);
+
+    // Thin chevron.
+    juce::Rectangle<float> arrowZone((float) (w - 22), 0.0f, 16.0f, (float) h);
+    juce::Path chevron;
+    chevron.startNewSubPath(arrowZone.getX() + 3.0f,    arrowZone.getCentreY() - 2.5f);
+    chevron.lineTo(arrowZone.getCentreX(),               arrowZone.getCentreY() + 3.0f);
+    chevron.lineTo(arrowZone.getRight() - 3.0f,          arrowZone.getCentreY() - 2.5f);
+    g.setColour(ink.withAlpha(0.85f));
+    g.strokePath(chevron, juce::PathStrokeType(1.2f, juce::PathStrokeType::curved,
+                                               juce::PathStrokeType::rounded));
 
     juce::ignoreUnused(box);
 }
@@ -97,10 +252,10 @@ VertigoAudioProcessorEditor::VertigoAudioProcessorEditor(VertigoAudioProcessor& 
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
     setLookAndFeel(&laf);
-    setSize(560, 440);
+    setSize(660, 500);
 
-    // ---- BUILD knob (big, centred) ----
-    setupKnob(buildKnob, buildLabel, "BUILD", true);
+    // ---- BUILD knob (hero vortex, centred) ----
+    setupKnob(buildKnob, buildLabel, "build", true);
     buildKnob.setName("BUILD");
 
     // ---- Preset selector ----
@@ -109,28 +264,32 @@ VertigoAudioProcessorEditor::VertigoAudioProcessorEditor(VertigoAudioProcessor& 
     presetBox.addItem("Big Room",      3);
     presetBox.addItem("Techno",        4);
     presetBox.setSelectedId(2);
+    presetBox.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(presetBox);
 
-    presetLabel.setText("PRESET", juce::dontSendNotification);
-    presetLabel.setFont(juce::Font(juce::FontOptions(11.0f).withStyle("Bold")));
+    // The preset label is intentionally hidden in the minimal layout (the combo
+    // text speaks for itself), but kept wired for completeness.
+    presetLabel.setText("preset", juce::dontSendNotification);
+    presetLabel.setFont(lightFont(10.0f, 0.25f));
     presetLabel.setJustificationType(juce::Justification::centred);
+    presetLabel.setColour(juce::Label::textColourId, VertigoColors::inkSoft);
     addAndMakeVisible(presetLabel);
 
-    // ---- Depth trim knobs ----
-    setupKnob(hpfKnob,     hpfLabel,     "HPF");
-    setupKnob(verbKnob,    verbLabel,    "SPACE");
-    setupKnob(snareKnob,   snareLabel,   "SNARE");
-    setupKnob(riserKnob,   riserLabel,   "RISER");
-    setupKnob(gateKnob,    gateLabel,    "GATE");
-    setupKnob(driveKnob,   driveLabel,   "DRIVE");
-    setupKnob(ppDelayKnob, ppDelayLabel, "P.PONG");
-    setupKnob(impactKnob,  impactLabel,  "IMPACT");
+    // ---- Depth trim knobs (lowercase, editorial labels) ----
+    setupKnob(hpfKnob,     hpfLabel,     "hpf");
+    setupKnob(verbKnob,    verbLabel,    "space");
+    setupKnob(snareKnob,   snareLabel,   "snare");
+    setupKnob(riserKnob,   riserLabel,   "riser");
+    setupKnob(gateKnob,    gateLabel,    "gate");
+    setupKnob(driveKnob,   driveLabel,   "drive");
+    setupKnob(ppDelayKnob, ppDelayLabel, "ping pong");
+    setupKnob(impactKnob,  impactLabel,  "impact");
 
-    // ---- Mix / Output ----
-    setupKnob(mixKnob,    mixLabel,    "MIX");
-    setupKnob(outputKnob, outputLabel, "OUTPUT");
+    // ---- Mix / Output (global) ----
+    setupKnob(mixKnob,    mixLabel,    "mix");
+    setupKnob(outputKnob, outputLabel, "output");
 
-    // ---- APVTS Attachments ----
+    // ---- APVTS Attachments (UNCHANGED — same IDs / wiring) ----
     auto& apvts = audioProcessor.apvts;
     buildAtt  = std::make_unique<SliderAttachment>(apvts, "build",       buildKnob);
     mixAtt    = std::make_unique<SliderAttachment>(apvts, "mix",         mixKnob);
@@ -155,89 +314,153 @@ void VertigoAudioProcessorEditor::setupKnob(juce::Slider& s, juce::Label& l,
                                              const juce::String& labelText, bool isBig)
 {
     s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    s.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f,
+                          juce::MathConstants<float>::pi * 2.75f, true); // 270° sweep
     s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     s.setPopupDisplayEnabled(true, false, this);
     addAndMakeVisible(s);
 
     l.setText(labelText, juce::dontSendNotification);
-    l.setFont(juce::Font(juce::FontOptions(isBig ? 13.0f : 10.0f).withStyle("Bold")));
+    l.setFont(lightFont(isBig ? 14.0f : 10.5f, isBig ? 0.32f : 0.22f));
     l.setJustificationType(juce::Justification::centred);
-    l.setColour(juce::Label::textColourId, juce::Colour(0xffccccdd));
+    l.setColour(juce::Label::textColourId, VertigoColors::ink);
     addAndMakeVisible(l);
+}
+
+//==============================================================================
+// Brand mark — the Desert Vision "eye + spiral" + lowercase wordmark.
+//==============================================================================
+void VertigoAudioProcessorEditor::drawBrandMark(juce::Graphics& g,
+                                                juce::Rectangle<float> area)
+{
+    using namespace VertigoColors;
+
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
+
+    // Eye dimensions.
+    const float eyeW = 64.0f;   // half-width
+    const float eyeH = 22.0f;   // half-height (vertical opening)
+
+    // Two opposing arcs meeting at sharp points left & right.
+    // Build the upper lid as a quadratic from left point to right point, then
+    // the lower lid back, so the corners come to a point.
+    const float leftX  = cx - eyeW;
+    const float rightX = cx + eyeW;
+
+    juce::Path eye;
+    eye.startNewSubPath(leftX, cy);
+    eye.quadraticTo(cx, cy - eyeH, rightX, cy);   // upper lid
+    eye.quadraticTo(cx, cy + eyeH, leftX, cy);    // lower lid
+    eye.closeSubPath();
+
+    g.setColour(ink);
+    g.strokePath(eye, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved,
+                                           juce::PathStrokeType::rounded));
+
+    // Small spiral "pupil" at the centre — ties the mark to "vertigo".
+    drawSpiral(g, cx, cy, 11.0f, 3, 1.2f, ink.withAlpha(0.85f), 0.10f);
+
+    // Wordmark below the eye: lowercase, wide tracking.
+    g.setColour(ink);
+    g.setFont(lightFont(22.0f, 0.55f));
+    g.drawText("vertigo",
+               juce::Rectangle<float>(area.getX(), cy + eyeH + 6.0f,
+                                      area.getWidth(), 26.0f),
+               juce::Justification::centred);
+
+    // A whisper-thin tagline.
+    g.setColour(inkSoft);
+    g.setFont(lightFont(8.5f, 0.45f));
+    g.drawText("build macro",
+               juce::Rectangle<float>(area.getX(), cy + eyeH + 32.0f,
+                                      area.getWidth(), 12.0f),
+               juce::Justification::centred);
 }
 
 void VertigoAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // Dark gradient background
-    juce::ColourGradient bg(juce::Colour(0xff1a1a2e), 0.0f, 0.0f,
-                             juce::Colour(0xff16213e), 0.0f, (float)getHeight(),
-                             false);
-    g.setGradientFill(bg);
-    g.fillRect(getLocalBounds());
+    using namespace VertigoColors;
 
-    // Title
-    g.setColour(juce::Colour(0xffe94560));
-    g.setFont(juce::Font(juce::FontOptions(32.0f).withStyle("Bold")));
-    g.drawText("VERTIGO", juce::Rectangle<int>(0, 8, getWidth(), 42),
-               juce::Justification::centred);
+    // Solid beige base.
+    g.fillAll(bg);
 
-    // Subtitle
-    g.setColour(juce::Colour(0xff6666aa));
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("ONE KNOB BUILD MACRO", juce::Rectangle<int>(0, 42, getWidth(), 18),
-               juce::Justification::centred);
+    // Very subtle radial lightening toward the centre for depth.
+    {
+        const float cx = getWidth() * 0.5f;
+        const float cy = getHeight() * 0.46f;
+        juce::ColourGradient glow(bg.brighter(0.05f), cx, cy,
+                                  bg, cx, (float) getHeight(), true);
+        glow.addColour(0.55, bg);
+        g.setGradientFill(glow);
+        g.fillRect(getLocalBounds());
+    }
 
-    // Separator line
-    g.setColour(juce::Colour(0xff3a3a5c));
-    g.drawHorizontalLine(64, 20.0f, (float)(getWidth() - 20));
+    // Brand mark header.
+    drawBrandMark(g, juce::Rectangle<float>(0.0f, 6.0f, (float) getWidth(), 80.0f));
+
+    // A hairline separator beneath the global mix/output pair, to read them as
+    // a distinct "master" group. Positioned just above that bottom row.
+    const float sepY = (float) (getHeight() - 118);
+    g.setColour(inkSoft.withAlpha(0.45f));
+    g.drawLine(getWidth() * 0.5f - 150.0f, sepY,
+               getWidth() * 0.5f + 150.0f, sepY, 1.0f);
 }
 
 void VertigoAudioProcessorEditor::resized()
 {
-    const int w = getWidth();
+    const int w      = getWidth();
+    const int margin = 24;
 
-    // === BUILD knob — large, centred top ===
-    const int buildSize = 160;
-    const int buildX = (w - buildSize) / 2;
-    buildKnob.setBounds(buildX, 72, buildSize, buildSize);
-    buildLabel.setBounds(buildX, 72 + buildSize, buildSize, 18);
+    // === Header occupies the top ~86px (drawn in paint()). ===
+    const int headerH = 86;
 
-    // === PRESET selector — below BUILD label ===
-    const int presetW = 200;
-    presetBox.setBounds((w - presetW) / 2, 258, presetW, 26);
-    presetLabel.setBounds((w - presetW) / 2 - 54, 258, 50, 26);
+    // === BUILD vortex — large, centred. ===
+    const int buildSize = 200;
+    const int buildX    = (w - buildSize) / 2;
+    const int buildY    = headerH + 6;
+    buildKnob.setBounds(buildX, buildY, buildSize, buildSize);
+    buildLabel.setBounds(buildX, buildY + buildSize - 2, buildSize, 20);
 
-    // === Depth trim row (8 knobs) ===
-    const int trimSize = 54;
-    const int trimY    = 298;
+    // === Preset selector — centred, below the build label. ===
+    const int presetW = 150;
+    const int presetH = 26;
+    const int presetY = buildY + buildSize + 22;
+    presetBox.setBounds((w - presetW) / 2, presetY, presetW, presetH);
+    // Keep the (muted) preset caption out of the way, hidden under the combo.
+    presetLabel.setBounds((w - presetW) / 2, presetY - 1, presetW, 1);
+    presetLabel.setVisible(false);
+
+    // === Row of 8 monoline trim knobs across the width. ===
+    const int trimSize = 62;
     const int labelH   = 14;
     const int numTrims = 8;
-    const int trimGap  = 6;
-    const int totalTrimW = numTrims * trimSize + (numTrims - 1) * trimGap;
-    int trimX = (w - totalTrimW) / 2;
+    const int usableW  = w - 2 * margin;
+    // Distribute 8 knobs with even spacing across the usable width.
+    const float slot   = usableW / (float) numTrims;
+    const int trimY    = presetY + presetH + 26;
 
-    auto placeTrim = [&](juce::Slider& s, juce::Label& l)
+    juce::Slider* trimKnobs[numTrims]  = { &hpfKnob, &verbKnob, &snareKnob, &riserKnob,
+                                           &gateKnob, &driveKnob, &ppDelayKnob, &impactKnob };
+    juce::Label*  trimLabels[numTrims] = { &hpfLabel, &verbLabel, &snareLabel, &riserLabel,
+                                           &gateLabel, &driveLabel, &ppDelayLabel, &impactLabel };
+
+    for (int i = 0; i < numTrims; ++i)
     {
-        s.setBounds(trimX, trimY, trimSize, trimSize);
-        l.setBounds(trimX, trimY + trimSize, trimSize, labelH);
-        trimX += trimSize + trimGap;
-    };
+        const int slotX  = margin + (int) std::round(i * slot);
+        const int centre = slotX + (int) std::round(slot * 0.5f);
+        const int kx     = centre - trimSize / 2;
+        trimKnobs[i]->setBounds(kx, trimY, trimSize, trimSize);
+        // Give labels the full slot width so "ping pong" doesn't clip.
+        trimLabels[i]->setBounds(slotX, trimY + trimSize, (int) std::round(slot), labelH);
+    }
 
-    placeTrim(hpfKnob,     hpfLabel);
-    placeTrim(verbKnob,    verbLabel);
-    placeTrim(snareKnob,   snareLabel);
-    placeTrim(riserKnob,   riserLabel);
-    placeTrim(gateKnob,    gateLabel);
-    placeTrim(driveKnob,   driveLabel);
-    placeTrim(ppDelayKnob, ppDelayLabel);
-    placeTrim(impactKnob,  impactLabel);
-
-    // === Bottom row: MIX + OUTPUT ===
-    const int bottomSize = 54;
-    const int bottomY    = 372;
-    const int bottomGap  = 80;
-    const int mixX       = (w - bottomGap) / 2 - bottomSize - 8;
-    const int outX       = (w + bottomGap) / 2 + 8;
+    // === Bottom: mix + output (global master group). ===
+    const int bottomSize = 62;
+    const int bottomY    = getHeight() - bottomSize - labelH - 16;
+    const int pairGap    = 96;
+    const int mixX       = w / 2 - pairGap / 2 - bottomSize;
+    const int outX       = w / 2 + pairGap / 2;
 
     mixKnob.setBounds(mixX, bottomY, bottomSize, bottomSize);
     mixLabel.setBounds(mixX, bottomY + bottomSize, bottomSize, labelH);

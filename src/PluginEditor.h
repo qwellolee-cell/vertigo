@@ -5,15 +5,20 @@
 #include "PluginProcessor.h"
 
 /**
- * VERTIGO Editor — M8
+ * VERTIGO Editor — "Desert Vision" minimal re-skin
+ *
+ * Aesthetic:
+ *   - Warm beige background, lots of negative space.
+ *   - Thin black monoline line-art everywhere (no heavy fills).
+ *   - A hypnotic vector VORTEX as the BUILD hero (juce::Path Archimedean spiral).
+ *   - Light, wide letter-spaced typography. Lowercase labels.
+ *   - A small "eye" brand mark + lowercase "vertigo" wordmark at the top.
  *
  * Layout:
- *   - Large BUILD knob (centred, top half)
- *   - PRESET combo box below BUILD
- *   - Row of depth trim knobs: HPF, SPACE, SNARE, RISER, GATE, DRIVE, IMPACT
- *   - DRY/WET and OUTPUT at bottom
- *
- * Dark blue-purple theme: bg #1a1a2e, accent #e94560
+ *   - Top brand-mark header (drawn in paint()).
+ *   - Centre: large BUILD vortex knob, "build" label, minimal preset combo.
+ *   - Row of 8 monoline trim knobs: hpf, space, snare, riser, gate, drive, ping pong, impact.
+ *   - Bottom: mix + output (global), gently separated.
  */
 class VertigoAudioProcessorEditor : public juce::AudioProcessorEditor
 {
@@ -37,9 +42,15 @@ private:
         void drawComboBox(juce::Graphics&, int w, int h, bool isDown,
                           int buttonX, int buttonY, int buttonW, int buttonH,
                           juce::ComboBox&) override;
+        // Light, wide-tracked typography for the combo box text.
+        juce::Font getComboBoxFont(juce::ComboBox&) override;
+        juce::Font getPopupMenuFont() override;
     };
 
     VertigoLookAndFeel laf;
+
+    // Draws the "eye + spiral" brand mark and lowercase wordmark.
+    void drawBrandMark(juce::Graphics&, juce::Rectangle<float> area);
 
     // ---- Widgets ----
     juce::Slider buildKnob;
