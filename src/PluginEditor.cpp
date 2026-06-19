@@ -252,17 +252,17 @@ VertigoAudioProcessorEditor::VertigoAudioProcessorEditor(VertigoAudioProcessor& 
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
     setLookAndFeel(&laf);
-    setSize(660, 500);
+    setSize(660, 580);
 
     // ---- BUILD knob (hero vortex, centred) ----
     setupKnob(buildKnob, buildLabel, "build", true);
     buildKnob.setName("BUILD");
 
     // ---- Preset selector ----
-    presetBox.addItem("Melodic House", 1);
-    presetBox.addItem("Indie Dance",   2);
-    presetBox.addItem("Big Room",      3);
-    presetBox.addItem("Techno",        4);
+    presetBox.addItem("Ether",    1);
+    presetBox.addItem("Liminal",  2);
+    presetBox.addItem("Torrent",  3);
+    presetBox.addItem("Obsidian", 4);
     presetBox.setSelectedId(2);
     presetBox.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(presetBox);
