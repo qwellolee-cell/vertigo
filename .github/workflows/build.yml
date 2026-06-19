@@ -46,13 +46,13 @@ jobs:
           key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: juce-${{ runner.os }}-
 
-      - name: Configure (macOS — universal binary)
+      - name: Configure (macOS — universal binary, Mojave+)
         if: runner.os == 'macOS'
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
 
       - name: Configure (Windows / Linux)
         if: runner.os != 'macOS'
@@ -82,7 +82,7 @@ jobs:
           Copy-Item "scripts/install-windows.bat" dist/
           Compress-Archive -Path "dist/*" -DestinationPath "${{ matrix.zip }}"
 
-      # ── Linux ──────────────────────────────────────────────────────────────
+      # ── Linux ────────────────────────────────────────────────────────────
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -130,7 +130,7 @@ jobs:
 
             | Platform | Download | How to install |
             |----------|----------|----------------|
-            | **macOS** (Intel + Apple Silicon) | `VERTIGO-mac.zip` | Unzip → double-click `install-mac.command` |
+            | **macOS** 10.13+ (Intel + Apple Silicon) | `VERTIGO-mac.zip` | Unzip → double-click `install-mac.command` |
             | **Windows** | `VERTIGO-windows.zip` | Unzip → double-click `install-windows.bat` |
             | **Linux** | `VERTIGO-linux.zip` | Unzip → run `./install-linux.sh` |
 
