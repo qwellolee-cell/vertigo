@@ -15,9 +15,10 @@ FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(VERTIGO
     COMPANY_NAME "Vertigo Audio"
+    BUNDLE_ID "com.vertigo-audio.VERTIGO"
     PLUGIN_MANUFACTURER_CODE Vtgo
     PLUGIN_CODE Vrtg
-    FORMATS VST3
+    FORMATS VST3 AU
     PRODUCT_NAME "VERTIGO"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
@@ -26,6 +27,7 @@ juce_add_plugin(VERTIGO
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE
     VST3_CATEGORIES "Fx"
+    AU_MAIN_TYPE kAudioUnitType_Effect
 )
 
 target_sources(VERTIGO PRIVATE
