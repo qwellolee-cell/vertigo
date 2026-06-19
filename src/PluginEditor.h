@@ -49,8 +49,8 @@ private:
     juce::Label     presetLabel;
 
     // Depth trims
-    juce::Slider hpfKnob, verbKnob, snareKnob, riserKnob, gateKnob, driveKnob, impactKnob;
-    juce::Label  hpfLabel, verbLabel, snareLabel, riserLabel, gateLabel, driveLabel, impactLabel;
+    juce::Slider hpfKnob, verbKnob, snareKnob, riserKnob, gateKnob, driveKnob, ppDelayKnob, impactKnob;
+    juce::Label  hpfLabel, verbLabel, snareLabel, riserLabel, gateLabel, driveLabel, ppDelayLabel, impactLabel;
 
     juce::Slider mixKnob, outputKnob;
     juce::Label  mixLabel, outputLabel;
@@ -60,7 +60,7 @@ private:
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
     std::unique_ptr<SliderAttachment> buildAtt, mixAtt, outputAtt;
-    std::unique_ptr<SliderAttachment> hpfAtt, verbAtt, snareAtt, riserAtt, gateAtt, driveAtt, impactAtt;
+    std::unique_ptr<SliderAttachment> hpfAtt, verbAtt, snareAtt, riserAtt, gateAtt, driveAtt, ppDelayAtt, impactAtt;
     std::unique_ptr<ComboAttachment>  presetAtt;
 
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& labelText,
