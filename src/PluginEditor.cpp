@@ -207,28 +207,30 @@ void VertigoAudioProcessorEditor::resized()
     presetBox.setBounds((w - presetW) / 2, 258, presetW, 26);
     presetLabel.setBounds((w - presetW) / 2 - 54, 258, 50, 26);
 
-    // === Depth trim row ===
+    // === Depth trim row (8 knobs) ===
     const int trimSize = 54;
     const int trimY    = 298;
     const int labelH   = 14;
-    const int numTrims = 7;
-    const int totalTrimW = numTrims * trimSize + (numTrims - 1) * 8;
+    const int numTrims = 8;
+    const int trimGap  = 6;
+    const int totalTrimW = numTrims * trimSize + (numTrims - 1) * trimGap;
     int trimX = (w - totalTrimW) / 2;
 
     auto placeTrim = [&](juce::Slider& s, juce::Label& l)
     {
         s.setBounds(trimX, trimY, trimSize, trimSize);
         l.setBounds(trimX, trimY + trimSize, trimSize, labelH);
-        trimX += trimSize + 8;
+        trimX += trimSize + trimGap;
     };
 
-    placeTrim(hpfKnob,    hpfLabel);
-    placeTrim(verbKnob,   verbLabel);
-    placeTrim(snareKnob,  snareLabel);
-    placeTrim(riserKnob,  riserLabel);
-    placeTrim(gateKnob,   gateLabel);
-    placeTrim(driveKnob,  driveLabel);
-    placeTrim(impactKnob, impactLabel);
+    placeTrim(hpfKnob,     hpfLabel);
+    placeTrim(verbKnob,    verbLabel);
+    placeTrim(snareKnob,   snareLabel);
+    placeTrim(riserKnob,   riserLabel);
+    placeTrim(gateKnob,    gateLabel);
+    placeTrim(driveKnob,   driveLabel);
+    placeTrim(ppDelayKnob, ppDelayLabel);
+    placeTrim(impactKnob,  impactLabel);
 
     // === Bottom row: MIX + OUTPUT ===
     const int bottomSize = 54;
