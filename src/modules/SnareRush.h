@@ -61,6 +61,9 @@ public:
         currentDiv = juce::jlimit(1, 256, div);
     }
 
+    /** Returns the currently active subdivision integer (e.g. 8, 16, 32, 64). */
+    int getCurrentDiv() const { return currentDiv; }
+
     /**
      * Set tempo and activation level.
      * bpm: current host BPM (or 120 fallback)

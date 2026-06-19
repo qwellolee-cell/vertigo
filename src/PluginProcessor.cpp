@@ -183,8 +183,8 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         }
     }
 
-    pingPongDelay.setBpm(bpm);
     snareRush.setParams(bpm, snareActivation, preset.snareMaxDiv);
+    pingPongDelay.setSync(bpm, snareRush.getCurrentDiv());
     noiseRiser.setActivation(riserActivation, preset.riserCeil);
     captureBuffer.setParams(bpm, gateActivation, preset.gateOnset);
 

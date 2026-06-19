@@ -15,12 +15,20 @@ public:
         setBpm(120.0);
     }
 
-    void setBpm(double bpm) {
-        // dotted 8th = 3 * (60/bpm) / 4 seconds  → 3/8 of a beat
-        float delaySec = (float)(3.0 * 60.0 / (bpm * 8.0));
-        delaySamples = juce::jlimit(1.0f, (float)(sampleRate * 1.9), delaySec * (float)sampleRate);
+    void setSync(double bpm, int snareDiv) {
+        // ping pong = double the snare density = half the note value
+        int ppDiv = snareDiv * 2;  // e.g. snare=8 → pp=16
+        // 1/ppDiv note in samples = (4.0 / ppDiv) * samplesPerBeat
+        float samplesPerBeat = (float)(sampleRate * 60.0 / bpm);
+        float delaySec = samplesPerBeat * 4.0f / (float)ppDiv;
+        delaySamples = juce::jlimit(1.0f, (float)(sampleRate * 1.9), delaySec);
         leftDelay.setDelay(delaySamples);
         rightDelay.setDelay(delaySamples);
+    }
+
+    // Fallback: default to 1/16 time (snareDiv=8)
+    void setBpm(double bpm) {
+        setSync(bpm, 8);
     }
 
     // process stereo buffer in-place, wet = activation * wetCeil * depth

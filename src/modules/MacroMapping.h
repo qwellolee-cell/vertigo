@@ -68,7 +68,7 @@ static const PresetParams kPresets[4] =
       2.00f, 2.00f, 0.00f,             // gate (off)
       0.58f, 0.90f, 0.35f,             // drive
       0.95f, 0.45f,                    // impact
-      0.35f, 0.85f, 0.40f },           // ping pong
+      0.35f, 0.85f, 0.25f },           // ping pong
 
     // 1: Indie Dance (default)
     { 0.18f, 0.92f, 780.0f,  1.50f,   // hpf
@@ -78,7 +78,7 @@ static const PresetParams kPresets[4] =
       0.80f, 0.96f, 0.50f,             // gate
       0.54f, 0.90f, 0.50f,             // drive
       0.96f, 0.70f,                    // impact
-      0.30f, 0.85f, 0.50f },           // ping pong
+      0.30f, 0.85f, 0.30f },           // ping pong
 
     // 2: Big Room
     { 0.14f, 0.90f, 950.0f,  2.00f,   // hpf
@@ -88,7 +88,7 @@ static const PresetParams kPresets[4] =
       0.72f, 0.95f, 0.85f,             // gate
       0.55f, 0.92f, 0.80f,             // drive
       0.97f, 1.00f,                    // impact
-      0.25f, 0.88f, 0.65f },           // ping pong
+      0.25f, 0.88f, 0.40f },           // ping pong
 
     // 3: Techno
     { 0.10f, 0.88f, 1100.0f, 2.30f,   // hpf
@@ -98,7 +98,7 @@ static const PresetParams kPresets[4] =
       0.60f, 0.94f, 1.00f,             // gate
       0.45f, 0.90f, 0.70f,             // drive
       0.94f, 0.90f,                    // impact
-      0.35f, 0.85f, 0.45f }            // ping pong
+      0.35f, 0.85f, 0.28f }            // ping pong
 };
 
 /** Compute all per-effect activations from BUILD knob + preset */
