@@ -12,6 +12,7 @@
 #include "modules/CaptureBuffer.h"
 #include "modules/ImpactCut.h"
 #include "modules/PingPongDelay.h"
+#include "modules/DCBlocker.h"
 
 class VertigoAudioProcessor : public juce::AudioProcessor
 {
@@ -75,6 +76,12 @@ private:
     // DSP — Output Limiter (always on, last in chain)
     juce::dsp::Limiter<float> limiter;
 
+    // DC blocker on the final mix (just before the limiter)
+    DCBlocker dcBlocker;
+
+    // 2x oversampling wrapping ONLY the drive (tanh) stage to reduce aliasing
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
+
     // Dry buffer for DRY/WET blend
     juce::AudioBuffer<float> dryBuffer;
 
@@ -83,6 +90,21 @@ private:
 
     // Smoothed build value to avoid zipper noise
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBuild;
+
+    // Per-activation smoothing (~20ms) to kill zipper-noise during fast automation
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smHpf;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smVerb;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smPp;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smDrive;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smSnare;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smRiser;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smGate;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smImpact;
+
+    // Auto gain-compensation (equal-loudness) state
+    float inEnv  = 0.0f;  // slow envelope of input RMS
+    float outEnv = 0.0f;  // slow envelope of output (wet) RMS
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smCompGain;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VertigoAudioProcessor)
 };

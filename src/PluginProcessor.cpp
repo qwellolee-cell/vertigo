@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <cmath>
+
 juce::AudioProcessorValueTreeState::ParameterLayout VertigoAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
@@ -100,6 +102,17 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     limiter.setThreshold(-1.0f);
     limiter.setRelease(100.0f);
 
+    // DC blocker on the final mix (just before the limiter)
+    dcBlocker.prepare(sampleRate, 2);
+
+    // 2x oversampling for ONLY the drive (tanh) stage
+    oversampler = std::make_unique<juce::dsp::Oversampling<float>>(
+        2, // num channels
+        1, // factor 1 = 2x oversampling
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR);
+    oversampler->initProcessing(static_cast<size_t>(samplesPerBlock));
+    setLatencySamples(juce::roundToInt(oversampler->getLatencyInSamples()));
+
     // Dry buffer for DRY/WET blend
     dryBuffer.setSize(2, samplesPerBlock, false, true, true);
 
@@ -109,9 +122,37 @@ void VertigoAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     // Smooth BUILD knob over 50ms to avoid filter frequency jumps
     smoothedBuild.reset(sampleRate, 0.05);
     smoothedBuild.setCurrentAndTargetValue(0.0f);
+
+    // Per-activation smoothing (~20ms ramp) to remove zipper-noise
+    smHpf.reset(sampleRate, 0.02);
+    smVerb.reset(sampleRate, 0.02);
+    smPp.reset(sampleRate, 0.02);
+    smDrive.reset(sampleRate, 0.02);
+    smSnare.reset(sampleRate, 0.02);
+    smRiser.reset(sampleRate, 0.02);
+    smGate.reset(sampleRate, 0.02);
+    smImpact.reset(sampleRate, 0.02);
+    smHpf.setCurrentAndTargetValue(0.0f);
+    smVerb.setCurrentAndTargetValue(0.0f);
+    smPp.setCurrentAndTargetValue(0.0f);
+    smDrive.setCurrentAndTargetValue(0.0f);
+    smSnare.setCurrentAndTargetValue(0.0f);
+    smRiser.setCurrentAndTargetValue(0.0f);
+    smGate.setCurrentAndTargetValue(0.0f);
+    smImpact.setCurrentAndTargetValue(0.0f);
+
+    // Auto gain-compensation: heavily smoothed (~100ms), start at unity
+    inEnv  = 0.0f;
+    outEnv = 0.0f;
+    smCompGain.reset(sampleRate, 0.1);
+    smCompGain.setCurrentAndTargetValue(1.0f);
 }
 
-void VertigoAudioProcessor::releaseResources() {}
+void VertigoAudioProcessor::releaseResources()
+{
+    if (oversampler != nullptr)
+        oversampler->reset();
+}
 
 bool VertigoAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
@@ -149,15 +190,36 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     smoothedBuild.setTargetValue(buildTarget);
     const float build = smoothedBuild.skip(numSamples);
 
-    // --- Macro activations via smoothstep + preset table ---
+    // --- Macro activations via smoothstep + preset table (raw, pre-smoothing) ---
     const PresetParams& preset = kPresets[presetIndex];
-    const float hpfActivation    = smoothstep(preset.hpfOnset,    preset.hpfFull,    build) * hpfDepth;
-    const float verbActivation   = smoothstep(preset.verbOnset,   preset.verbFull,   build) * verbDepth;
-    const float driveActivation  = smoothstep(preset.driveOnset,  preset.driveFull,  build) * driveDepth;
-    const float snareActivation  = smoothstep(preset.snareOnset,  preset.snareFull,  build) * snareDepth;
-    const float riserActivation  = smoothstep(preset.riserOnset,  preset.riserFull,  build) * riserDepth;
-    const float gateActivation   = smoothstep(preset.gateOnset,   preset.gateFull,   build) * gateDepth;
-    const float impactActivation = smoothstep(preset.impactOnset, 1.0f,              build) * impactDepth;
+    const float rawHpf    = smoothstep(preset.hpfOnset,    preset.hpfFull,    build) * hpfDepth;
+    const float rawVerb   = smoothstep(preset.verbOnset,   preset.verbFull,   build) * verbDepth;
+    const float rawDrive  = smoothstep(preset.driveOnset,  preset.driveFull,  build) * driveDepth;
+    const float rawSnare  = smoothstep(preset.snareOnset,  preset.snareFull,  build) * snareDepth;
+    const float rawRiser  = smoothstep(preset.riserOnset,  preset.riserFull,  build) * riserDepth;
+    const float rawGate   = smoothstep(preset.gateOnset,   preset.gateFull,   build) * gateDepth;
+    const float rawImpact = smoothstep(preset.impactOnset, 1.0f,              build) * impactDepth;
+    const float rawPp     = smoothstep(preset.ppOnset,     preset.ppFull,     build) * preset.ppWetCeil * pingPongDepth;
+
+    // --- Per-activation smoothing (~20ms) read at block granularity ---
+    // Steady-state behavior is identical; only fast transitions are smoothed.
+    smHpf.setTargetValue(rawHpf);
+    smVerb.setTargetValue(rawVerb);
+    smDrive.setTargetValue(rawDrive);
+    smSnare.setTargetValue(rawSnare);
+    smRiser.setTargetValue(rawRiser);
+    smGate.setTargetValue(rawGate);
+    smImpact.setTargetValue(rawImpact);
+    smPp.setTargetValue(rawPp);
+
+    const float hpfActivation    = smHpf.skip(numSamples);
+    const float verbActivation   = smVerb.skip(numSamples);
+    const float driveActivation  = smDrive.skip(numSamples);
+    const float snareActivation  = smSnare.skip(numSamples);
+    const float riserActivation  = smRiser.skip(numSamples);
+    const float gateActivation   = smGate.skip(numSamples);
+    const float impactActivation = smImpact.skip(numSamples);
+    const float ppWet            = smPp.skip(numSamples);
 
     // --- Update DSP module parameters ---
     hpfSweep.setActivation(hpfActivation, 20.0f, preset.hpfCeilHz, preset.hpfMaxRes);
@@ -188,6 +250,22 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     noiseRiser.setActivation(riserActivation, preset.riserCeil);
     captureBuffer.setParams(bpm, gateActivation, preset.gateOnset);
 
+    // --- Measure INPUT RMS on the dry input (very start), update slow envelope ---
+    {
+        double sumSq = 0.0;
+        const int nCh = buffer.getNumChannels();
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            const float* d = buffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                sumSq += (double) d[i] * (double) d[i];
+        }
+        const float blockRms = (numSamples > 0 && nCh > 0)
+            ? std::sqrt((float) (sumSq / (double) (numSamples * nCh)))
+            : 0.0f;
+        inEnv = inEnv * 0.999f + (1.0f - 0.999f) * blockRms;
+    }
+
     // --- Save dry signal before processing (for DRY/WET blend) ---
     if (numSamples <= dryBuffer.getNumSamples())
     {
@@ -207,16 +285,24 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     if (verbActivation > 0.001f)
         spaceVerb.process(block);
 
-    // Ping Pong Delay — after SpaceVerb, before Drive
-    {
-        const float ppActivation = smoothstep(preset.ppOnset, preset.ppFull, build);
-        const float ppWet = ppActivation * preset.ppWetCeil * pingPongDepth;
-        pingPongDelay.process(buffer, ppWet);
-    }
+    // Ping Pong Delay — after SpaceVerb, before Drive (smoothed wet level)
+    pingPongDelay.process(buffer, ppWet);
 
-    // Drive after verb + ping pong (M3)
+    // Drive after verb + ping pong (M3) — run the tanh shaping at 2x oversampling
     if (driveActivation > 0.001f)
-        driveModule.process(block, driveActivation);
+    {
+        if (oversampler != nullptr)
+        {
+            // Upsample the throughput, shape at the higher rate, then downsample.
+            auto oversampledBlock = oversampler->processSamplesUp(block);
+            driveModule.process(oversampledBlock, driveActivation);
+            oversampler->processSamplesDown(block);
+        }
+        else
+        {
+            driveModule.process(block, driveActivation);
+        }
+    }
 
     // Capture Buffer: stutter/freeze from throughput signal (M6)
     if (gateActivation > 0.001f)
@@ -247,6 +333,43 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     // =====================================================================
+    // AUTO GAIN-COMPENSATION (equal-loudness) — measured on the wet mix,
+    // applied BEFORE dry/wet, output gain and limiter.
+    // =====================================================================
+    {
+        // Measure OUTPUT RMS on the wet mix, update slow envelope.
+        double sumSq = 0.0;
+        const int nCh = buffer.getNumChannels();
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            const float* d = buffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                sumSq += (double) d[i] * (double) d[i];
+        }
+        const float blockRms = (numSamples > 0 && nCh > 0)
+            ? std::sqrt((float) (sumSq / (double) (numSamples * nCh)))
+            : 0.0f;
+        outEnv = outEnv * 0.999f + (1.0f - 0.999f) * blockRms;
+
+        // Compute compensation ratio, clamped and skipped near silence.
+        float compTarget = 1.0f;
+        if (inEnv >= 1.0e-4f)
+        {
+            const float ratio = inEnv / juce::jmax(outEnv, 1.0e-6f);
+            compTarget = juce::jlimit(0.5f, 1.5f, ratio);
+        }
+        smCompGain.setTargetValue(compTarget);
+        const float compGain = smCompGain.skip(numSamples);
+
+        buffer.applyGain(compGain);
+    }
+
+    // =====================================================================
+    // DC blocker on the final mix (just before the dry/wet + limiter)
+    // =====================================================================
+    dcBlocker.process(buffer);
+
+    // =====================================================================
     // PATH 3: DRY/WET blend — mix dry original with processed wet
     // =====================================================================
     if (mixWet < 0.9999f && numSamples <= dryBuffer.getNumSamples())
@@ -261,12 +384,12 @@ void VertigoAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     // =====================================================================
-    // Impact cut (M8) — applied to final mix
+    // Impact cut (M8) — applied to final mix (unchanged position)
     // =====================================================================
     if (impactActivation > 0.001f)
         impactCut.process(buffer, numSamples);
 
-    // Output gain
+    // Output gain (user)
     buffer.applyGain(outputGain);
 
     // Output Limiter — always on, last in chain
